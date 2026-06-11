@@ -50,6 +50,18 @@ const MENU = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+async function getStoreIds() {
+  const res = await fetch(`${BASE}/stores`, { headers });
+  const data = await res.json();
+  const stores = data.stores || [];
+  if (stores.length === 0) {
+    console.error("❌ No stores found in Loyverse account!");
+    process.exit(1);
+  }
+  console.log(`🏪 Found ${stores.length} store(s): ${stores.map(s => s.name).join(", ")}`);
+  return stores.map(s => s.id);
+}
+
 async function createCategory(name) {
   const res = await fetch(`${BASE}/categories`, {
     method: "POST", headers,
@@ -57,7 +69,7 @@ async function createCategory(name) {
   });
   const data = await res.json();
   if (data.id) {
-    console.log(`✅ Category: ${name} (${data.id})`);
+    console.log(`✅ Category: ${name}`);
     return data.id;
   } else {
     console.error(`❌ Category error [${name}]: ${JSON.stringify(data)}`);
@@ -65,28 +77,48 @@ async function createCategory(name) {
   }
 }
 
-async function createItem(item, categoryId) {
-  let variants;
+async function createItem(item, categoryId, storeIds) {
+  const storeEntry = (price) => storeIds.map(id => ({
+    store_id: id,
+    price,
+    available_for_sale: true,
+  }));
+
+  let body;
   if (item.variants) {
-    variants = item.variants.map((v) => ({
-      sku: `${item.name.replace(/ /g, "-").toUpperCase()}-${v.name.toUpperCase()}`,
-      price: v.price, cost: 0,
-      option1_name: "Size", option1_value: v.name,
-    }));
+    body = {
+      item_name: item.name,
+      category_id: categoryId,
+      option1_name: "Size",
+      variants: item.variants.map((v) => ({
+        sku: `${item.name.replace(/ /g, "-").toUpperCase()}-${v.name.toUpperCase()}`,
+        cost: 0,
+        option1_value: v.name,
+        stores: storeEntry(v.price),
+      })),
+    };
   } else {
-    variants = [{ sku: item.name.replace(/ /g, "-").toUpperCase(), price: item.price, cost: 0 }];
+    body = {
+      item_name: item.name,
+      category_id: categoryId,
+      variants: [{
+        sku: item.name.replace(/ /g, "-").toUpperCase(),
+        cost: 0,
+        stores: storeEntry(item.price),
+      }],
+    };
   }
 
   const res = await fetch(`${BASE}/items`, {
     method: "POST", headers,
-    body: JSON.stringify({ item_name: item.name, category_id: categoryId, variants }),
+    body: JSON.stringify(body),
   });
   const data = await res.json();
   if (data.id) {
-    console.log(`  ✅ ${item.name}${item.variants ? ` (${item.variants.length} sizes)` : ` — ${item.price} RO`}`);
+    console.log(`  ✅ ${item.name}${item.variants ? ` (${item.variants.map(v => `${v.name}: ${v.price}`).join(", ")})` : ` — ${item.price} RO`}`);
     return true;
   } else {
-    console.error(`  ❌ ${item.name}: ${data.message || JSON.stringify(data)}`);
+    console.error(`  ❌ ${item.name}: ${JSON.stringify(data)}`);
     return false;
   }
 }
@@ -94,13 +126,16 @@ async function createItem(item, categoryId) {
 let success = 0, fail = 0;
 console.log("🚀 Starting upload to Loyverse...\n");
 
+const storeIds = await getStoreIds();
+await sleep(300);
+
 for (const [catName, items] of Object.entries(MENU)) {
   console.log(`\n── ${catName} ──`);
   const catId = await createCategory(catName);
   await sleep(400);
   if (!catId) continue;
   for (const item of items) {
-    const ok = await createItem(item, catId);
+    const ok = await createItem(item, catId, storeIds);
     ok ? success++ : fail++;
     await sleep(350);
   }

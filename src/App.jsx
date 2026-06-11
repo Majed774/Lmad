@@ -78,31 +78,49 @@ export default function App() {
     }
   };
 
-  const createItem = async (item, categoryId) => {
-    let variants;
-    if (item.variants) {
-      variants = item.variants.map((v) => ({
-        sku: `${item.name.replace(/ /g, "-").toUpperCase()}-${v.name.toUpperCase()}`,
-        price: v.price,
-        cost: 0,
-        option1_name: "Size",
-        option1_value: v.name,
-      }));
-    } else {
-      variants = [
-        {
-          sku: item.name.replace(/ /g, "-").toUpperCase(),
-          price: item.price,
-          cost: 0,
-        },
-      ];
+  const getStoreIds = async () => {
+    const res = await fetch(`${BASE}/stores`, { headers });
+    const data = await res.json();
+    const stores = data.stores || [];
+    if (stores.length === 0) {
+      log("❌ No stores found!", "error");
+      return [];
     }
+    log(`🏪 ${stores.length} store(s): ${stores.map(s => s.name).join(", ")}`, "info");
+    return stores.map(s => s.id);
+  };
 
-    const body = {
-      item_name: item.name,
-      category_id: categoryId,
-      variants,
-    };
+  const createItem = async (item, categoryId, storeIds) => {
+    const storeEntry = (price) => storeIds.map((id) => ({
+      store_id: id,
+      price,
+      available_for_sale: true,
+    }));
+
+    let body;
+    if (item.variants) {
+      body = {
+        item_name: item.name,
+        category_id: categoryId,
+        option1_name: "Size",
+        variants: item.variants.map((v) => ({
+          sku: `${item.name.replace(/ /g, "-").toUpperCase()}-${v.name.toUpperCase()}`,
+          cost: 0,
+          option1_value: v.name,
+          stores: storeEntry(v.price),
+        })),
+      };
+    } else {
+      body = {
+        item_name: item.name,
+        category_id: categoryId,
+        variants: [{
+          sku: item.name.replace(/ /g, "-").toUpperCase(),
+          cost: 0,
+          stores: storeEntry(item.price),
+        }],
+      };
+    }
 
     const res = await fetch(`${BASE}/items`, {
       method: "POST",
@@ -112,7 +130,7 @@ export default function App() {
     const data = await res.json();
     if (data.id) {
       setStats((s) => ({ ...s, success: s.success + 1 }));
-      log(`✅ ${item.name} ${item.variants ? `(${item.variants.length} sizes)` : `— ${item.price} RO`}`, "success");
+      log(`✅ ${item.name} ${item.variants ? `(${item.variants.map(v => `${v.name}: ${v.price}`).join(", ")})` : `— ${item.price} RO`}`, "success");
     } else {
       setStats((s) => ({ ...s, fail: s.fail + 1 }));
       log(`❌ ${item.name}: ${data.message || JSON.stringify(data)}`, "error");
@@ -127,6 +145,10 @@ export default function App() {
 
     log("🚀 Starting upload to Loyverse...", "info");
 
+    const storeIds = await getStoreIds();
+    await sleep(300);
+    if (storeIds.length === 0) { setRunning(false); return; }
+
     for (const [categoryName, items] of Object.entries(MENU)) {
       log(`\n── ${categoryName} ──`, "section");
       const catId = await createCategory(categoryName);
@@ -134,7 +156,7 @@ export default function App() {
       if (!catId) continue;
 
       for (const item of items) {
-        await createItem(item, catId);
+        await createItem(item, catId, storeIds);
         await sleep(350);
       }
     }
