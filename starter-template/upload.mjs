@@ -1,0 +1,149 @@
+const TOKEN = process.env.LOYVERSE_TOKEN;
+if (!TOKEN) {
+  console.error("❌ Missing LOYVERSE_TOKEN environment variable");
+  process.exit(1);
+}
+const BASE = "https://api.loyverse.com/v1.0";
+
+const headers = {
+  "Authorization": `Bearer ${TOKEN}`,
+  "Content-Type": "application/json",
+};
+
+const MENU = {
+  Drinks: [
+    { name: "Latte", price: 1.4 },
+    { name: "Spanish", price: 1.4 },
+    { name: "Caramel", price: 1.5 },
+    { name: "Vanilla", price: 1.5 },
+    { name: "Pistachio", price: 1.6 },
+    { name: "Saffron", price: 1.5 },
+    { name: "Rose", price: 1.5 },
+    { name: "Americano", price: 1.3 },
+    { name: "Chocolate", price: 1.5 },
+    { name: "Mocha", price: 1.5 },
+    { name: "Matcha", price: 1.8 },
+    { name: "V 60", price: null, variants: [{ name: "Small", price: 1.6 }, { name: "Large", price: 1.8 }] },
+    { name: "Soda", price: 0.5 },
+    { name: "Cappuccino", price: 1.3 },
+    { name: "Flat White", price: 1.4 },
+    { name: "Cortado", price: 1.3 },
+    { name: "Espresso", price: 1.1 },
+    { name: "Cold Brew", price: 1.7 },
+    { name: "Summer Limu Drink", price: 1.5 },
+    { name: "Ice Tea", price: 1.5 },
+    { name: "Karkidih", price: 1.1 },
+    { name: "Creamy Espresso", price: 1.8 },
+    { name: "Limu Bro", price: 1.8 },
+  ],
+  Mojito: [
+    { name: "Strawberry Mojito", price: 0.9 },
+    { name: "Passion Mojito", price: 0.9 },
+    { name: "Blueberry Mojito", price: 0.9 },
+    { name: "Peach Mojito", price: 0.9 },
+    { name: "Water", price: 0.1 },
+  ],
+  Sweets: [
+    { name: "Cookies", price: 0.6 },
+    { name: "Chocolate Cake", price: 1.5 },
+    { name: "Tiramisu", price: 1.6 },
+    { name: "San Sebastian", price: 1.9 },
+    { name: "Ice Cream", price: 1.2 },
+  ],
+};
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function getStoreIds() {
+  const res = await fetch(`${BASE}/stores`, { headers });
+  const data = await res.json();
+  const stores = data.stores || [];
+  if (stores.length === 0) {
+    console.error("❌ No stores found in Loyverse account!");
+    process.exit(1);
+  }
+  console.log(`🏪 Found ${stores.length} store(s): ${stores.map(s => s.name).join(", ")}`);
+  return stores.map(s => s.id);
+}
+
+async function createCategory(name) {
+  const res = await fetch(`${BASE}/categories`, {
+    method: "POST", headers,
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (data.id) {
+    console.log(`✅ Category: ${name}`);
+    return data.id;
+  } else {
+    console.error(`❌ Category error [${name}]: ${JSON.stringify(data)}`);
+    return null;
+  }
+}
+
+async function createItem(item, categoryId, storeIds) {
+  const storeEntry = (price) => storeIds.map(id => ({
+    store_id: id,
+    price,
+    available_for_sale: true,
+  }));
+
+  let body;
+  if (item.variants) {
+    body = {
+      item_name: item.name,
+      category_id: categoryId,
+      option1_name: "Size",
+      variants: item.variants.map((v) => ({
+        sku: `${item.name.replace(/ /g, "-").toUpperCase()}-${v.name.toUpperCase()}`,
+        cost: 0,
+        option1_value: v.name,
+        stores: storeEntry(v.price),
+      })),
+    };
+  } else {
+    body = {
+      item_name: item.name,
+      category_id: categoryId,
+      variants: [{
+        sku: item.name.replace(/ /g, "-").toUpperCase(),
+        cost: 0,
+        stores: storeEntry(item.price),
+      }],
+    };
+  }
+
+  const res = await fetch(`${BASE}/items`, {
+    method: "POST", headers,
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.id) {
+    console.log(`  ✅ ${item.name}${item.variants ? ` (${item.variants.map(v => `${v.name}: ${v.price}`).join(", ")})` : ` — ${item.price} RO`}`);
+    return true;
+  } else {
+    console.error(`  ❌ ${item.name}: ${JSON.stringify(data)}`);
+    return false;
+  }
+}
+
+let success = 0, fail = 0;
+console.log("🚀 Starting upload to Loyverse...\n");
+
+const storeIds = await getStoreIds();
+await sleep(300);
+
+for (const [catName, items] of Object.entries(MENU)) {
+  console.log(`\n── ${catName} ──`);
+  const catId = await createCategory(catName);
+  await sleep(400);
+  if (!catId) continue;
+  for (const item of items) {
+    const ok = await createItem(item, catId, storeIds);
+    ok ? success++ : fail++;
+    await sleep(350);
+  }
+}
+
+console.log(`\n🎉 Done! ${success} uploaded, ${fail} failed.`);
+if (fail > 0) process.exit(1);
