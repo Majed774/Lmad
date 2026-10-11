@@ -1,4 +1,4 @@
-# قالب موقع جديد (نسخة من Lmad)
+# haratalwadi (قالب مبني على Lmad)
 
 هذا المجلد يحتوي على كل ما تحتاجه لبدء موقع جديد مطابق لموقع **Lmad**
 (React + Vite، ورفع المنيو إلى Loyverse).
@@ -18,7 +18,7 @@
 
 ## خطوات البدء في مستودع جديد
 
-1. أنشئ مستودعًا جديدًا على GitHub (مثلًا `my-new-site`).
+1. أنشئ مستودعًا جديدًا على GitHub (مثلًا `haratalwadi`).
 2. انسخ **محتويات** هذا المجلد (بما فيها الملفات المخفية `.github` و `.gitignore` و `.env.example`) إلى جذر المستودع الجديد.
 3. ثبّت المكتبات:
    ```bash
@@ -52,6 +52,6 @@
 
 ## ما الذي تغيّره للموقع الجديد
 
-- الاسم: `name` في `package.json` و `<title>` في `index.html` (حاليًا `my-new-site`).
+- الاسم: `name` في `package.json` و `<title>` في `index.html` (حاليًا `haratalwadi`).
 - المنيو: الكائن `MENU` في `src/App.jsx` و `upload.mjs`.
 - الشكل: `src/App.css` و `src/index.css`.
